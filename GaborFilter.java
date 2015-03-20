@@ -13,8 +13,6 @@ import java.io.BufferedReader;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStreamReader;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 import javax.imageio.ImageIO;
 
 /**
@@ -25,78 +23,64 @@ public class GaborFilter {
 
     static int height, width, kval;
     static Kernel[][] kernels;
+    static int[][] convolution;    
     
-    static Kernel gaborKernel(double lambda, double theta, double psi, double sigma, double gamma, Kernel kernel) {
+    //generate a gabor kernel according to the entered parameters
+    static Kernel gaborKernel(float lambda, float theta, float psi, float sigma, float gamma, Kernel kernel) {
         
- 	theta = (theta * Math.PI) / (double)180;
-	psi = (psi * Math.PI) / (double)180;
+ 	theta = (theta * (float)Math.PI) / (float)180;
+	psi = (psi * (float)Math.PI) / (float)180;
         
-	double gauss, sinusoid, sinusoid2, xprime, yprime;
+	float gauss, sinusoid, sinusoid2,gaborReal, gaborImage, xprime, yprime;
         //for each determined pixel of the kernel, we calculate its value according to equations seen:
         //http://en.wikipedia.org/wiki/Gabor_filter
         int x, y;
 	for(y = -(kval/2); y < (kval/2)+1; ++y) {
 		for(x = -(kval/2); x < (kval/2)+1; ++x) {
 		
-			xprime = (x * Math.cos(theta)) + (y * Math.sin(theta));
-			yprime = -(x * Math.sin(theta)) + (y * Math.cos(theta));
-                        
-                                    /*System.out.println("xprime: " + xprime);
-                                    System.out.println("yprime: " + yprime);
-                                    System.out.println("sigma: " + sigma);
-                                    System.out.println("gamma: " + gamma);
-                                    System.out.println("lambda: " + lambda);*/ 
+			xprime = (x * (float)Math.cos(theta)) + (y * (float)Math.sin(theta));
+			yprime = -(x * (float)Math.sin(theta)) + (y * (float)Math.cos(theta));
                                     
-			gauss = Math.exp(-( (xprime*xprime + lambda*lambda*yprime*yprime)/(double)(2.0*sigma*sigma)));		
+			gauss = (float)Math.exp(-( (xprime*xprime + lambda*lambda*yprime*yprime)/(2.0*sigma*sigma)));		
                         
-                        sinusoid = Math.cos((2 * Math.PI * (xprime / lambda)) + psi);
-                        sinusoid2 = Math.sin((2 * Math.PI * (xprime / lambda)) + psi);
-			
-			//kernel.kernel[y+(kval/2)][x+(kval/2)] = Math.sqrt(Math.pow((gauss * sinusoid), 2.0) + Math.pow((gauss * sinusoid2), 2.0));
-		
-                        double gaborReal = gauss * sinusoid;
-                        double gaborImage = gauss * sinusoid2;
+                        sinusoid = (float)Math.cos((2 * Math.PI * (xprime / lambda)) + psi);
+                        sinusoid2 = (float)Math.sin((2 * Math.PI * (xprime / lambda)) + psi);
+					
+                        gaborReal = gauss * sinusoid;
+                        gaborImage = gauss * sinusoid2;
                         
-                        //double gaborReal = Math.exp(-(Math.pow(xprime/sigma, 2) + Math.pow(y*gamma/sigma, 2))/2)*Math.cos(2*Math.PI*x/lambda + psi);
-                        //double gaborImage = Math.exp(-(Math.pow(xprime/sigma, 2) + Math.pow(y*gamma/sigma, 2))/2)*Math.sin(2*Math.PI*x/lambda + psi);
-                        kernel.kernel[y+(kval/2)][x+(kval/2)] =  Math.sqrt(Math.pow(gaborReal, 2) + Math.pow(gaborImage, 2));
+                        //kernel.kernel[y+(kval/2)][x+(kval/2)] =  Math.sqrt(gaborReal*gaborReal + gaborImage*gaborImage);
+                        kernel.kernel[y+(kval/2)][x+(kval/2)] =  gaborReal;
                 }
 	}
         return kernel;
     }
     
+    //normalize the generated kernel so its sum is approximately 1
     static Kernel normalizeKernel(Kernel kernel) {
         
-        double sum = 0f;
+        float sum = 0f;
         int i, j;
         for(i = 0; i < kval; ++i) {
             for(j = 0; j < kval; ++j) {
                 
-                sum = sum + Math.abs(kernel.kernel[i][j]);
+                sum = sum + (float)Math.abs(kernel.kernel[i][j]);
             }
         }    
         
-        //===================
-        sum /= kval*kval;
-        /*for(i = 0; i < kval; ++i) {
-            for(j = 0; j < kval; ++j) {
-                
-                kernel.kernel[i][j] = kernel.kernel[i][j] - sum;
-            }
-        }*/
-        //===================
-        
-        //original normalization below:
+        float kcheck = 0;
         for(i = 0; i < kval; ++i) {
             for(j = 0; j < kval; ++j) {
                 
                 kernel.kernel[i][j] = kernel.kernel[i][j] / sum;
+                kcheck += kernel.kernel[i][j];
             }
-        }        
+        }   
         
         return kernel;
     }
     
+    //prints the kernel values
     static void printKernel(Kernel kernel) {
         
         int i, j;
@@ -109,15 +93,17 @@ public class GaborFilter {
         return;
     }
     
-    static BufferedImage applyFilter(BufferedImage src, Kernel kernel){
+    //convolve the generated kernel with the grayscale src image
+    static int applyFilter(BufferedImage src, Kernel kernel){
         
-        //int offset = (kval / 2) + 1;
         int filteredDim = (width - kval + 1);
         
         BufferedImage filtered = new BufferedImage(filteredDim, filteredDim, BufferedImage.TYPE_BYTE_GRAY);
         
-        double product = 0;
-        int rgb, grayVal = 0;
+        float product = 0;
+        int rgb, rgb2, grayVal = 0;
+        
+        convolution = new int[filteredDim][filteredDim];
         
         //the filtered image is smaller than the original based on kernel size
         //we calculate each pixel of the filtered image in these loops
@@ -132,21 +118,55 @@ public class GaborFilter {
                             
                             rgb = src.getRGB((i+k), (j+l));
                             grayVal = rgb & 0xFF;
-                            product = product + (grayVal * kernel.kernel[k][l]);
+                            product = product + (float)((float)grayVal * kernel.kernel[k][l]);
+                            
                     }
                 }
                 
-                //System.out.println("Gray: " + (grayVal) + "Pixel: " + product);
-                //int rgb2 = (int)product<<16 | (int)product << 8 | (int)product;
-                filtered.setRGB(i, j, (int)Math.ceil(product));
-                //System.out.println("Prod: " + product);
+                rgb2 = (int)product<<16 | (int)product << 8 | (int)product;
+                convolution[i][j] = (int)product;
                 product = 0;
             }
         }
         
-        return filtered;
+        return filteredDim;
     }
     
+    //normalize the values obtained from convolution to a 0-255 grayscale range
+    static BufferedImage constructResult(int filteredDim) {
+        
+        BufferedImage result = new BufferedImage(filteredDim, filteredDim, BufferedImage.TYPE_BYTE_GRAY);
+        
+        int max = convolution[0][0];
+        int min = convolution[0][0];
+        int grayVal;
+                
+        for(int i = 1; i < filteredDim; ++i) {
+            for(int j = 1; j < filteredDim; ++j) {
+            
+                grayVal = convolution[i][j];
+                if(grayVal < min)
+                    min = grayVal;
+                if(grayVal > max)
+                    max = grayVal;
+            }
+        }
+                
+        int newGray, rgb;
+        for(int i = 0; i < filteredDim; ++i) {
+            for(int j = 0; j < filteredDim; ++j) {
+                
+                grayVal = convolution[i][j];
+                newGray = (grayVal-min) * ((255-0)/(max-min)) + 0;
+                rgb = newGray<<16 | newGray << 8 | newGray;
+                result.setRGB(i,j,rgb);
+            }
+        }
+        
+        return result;
+    }
+    
+    //inport image and apply gabor filter and energy calculations
     public static void main(String[] args) throws IOException {
 
         BufferedReader br = new BufferedReader(new InputStreamReader(System.in));
@@ -162,12 +182,6 @@ public class GaborFilter {
         height = image.getHeight(null);     //height of source image
         width = image.getWidth(null);       //width of source image
         
-        
-            //Image image = ImageIO.read(new File("hiresbird.jpg"));
-            // Creating buffered image from the given file. NOTE: It's crucial to build the data that way!
-            //BufferedImage bufferedImage = new BufferedImage(image.getWidth(null), image.getHeight(null), BufferedImage.TYPE_INT_RGB);
-        
-        //convert the image into a grayscale image (not neccessary)
         BufferedImage greyImage = new BufferedImage(width, height, BufferedImage.TYPE_BYTE_GRAY);
         
         //write the new image into a file
@@ -175,11 +189,11 @@ public class GaborFilter {
         graphics.drawImage(image, 0, 0, null);
         ImageIO.write(greyImage, "jpg", new File("greyImage.png"));
         
-        //input parameters fot Gabor kernel
-        double lambda, theta, psi, sigma, gamma;
+        //input parameters for Gabor kernel
+        float lambda, theta, psi, sigma, gamma;
         
         //lambda = 50 takes appx 50 minutes
-        lambda = 10;               //pixel range: ( < 1/5 of image length or width to prevent edge effects)
+        lambda = 20;               //pixel range: ( < 1/5 of image length or width to prevent edge effects)
                                    //controls "density" of the band
         
         theta = 0;                 //degree range: ( 0-360, 0 is vertical )
@@ -188,9 +202,9 @@ public class GaborFilter {
         psi = 0;                   //degree range: ( -180-180 ) 
                                    //controls "unknown" **phase offset
         
-        sigma = .56*lambda;        //Used defailt bandwidth of 1
+        sigma = (float).56*lambda;        //Used defailt bandwidth of 1
         
-        gamma = 1;                //range: (0-1] where 1 is completely circular
+        gamma = (float).5;                //range: (0-1] where 1 is completely circular
                                    //controls "elipticity/height" of the band **aspect ratio
         
         //the following code was sampled from:
@@ -200,17 +214,20 @@ public class GaborFilter {
         int k = (int)Math.ceil(Math.sqrt(-2 * sigma * sigma * Math.log(0.005)));
         if(k % 2 == 1) k++;
         
+        //kval = 3;
         kval = 2*k+1;            //length and width of kernel (tune parameter)
         
         kernels = new Kernel[4][6];
         //calculate Gabor kernels (stored locally)
        
-        for(int z = 0; z < 4; ++z) {            //6 different orientations
-            for(int y = 0; y < 6; ++y) {        //4 different scales     
+        for(int z = 0; z < 4; ++z) {            //4 different scales  
+            for(int y = 0; y < 6; ++y) {        //6 different orientations   
                 Kernel ker = new Kernel(kval);
-                kernels[z][y] = gaborKernel(lambda, (15*y + 15), psi, sigma, gamma, ker); 
+                kernels[z][y] = gaborKernel(lambda, (15*y), psi, sigma, gamma, ker); 
             }
         }
+        
+        //printKernel(kernels[0][0]);
         
         //unify 6 different orientations into one kernal stored at kernels[0][0]
         /*for(int i = 1; i < 6; ++i) {
@@ -233,7 +250,7 @@ public class GaborFilter {
             }
         }
         
-        double[][] energyMap = new double[4][6];
+        float[][] energyMap = new float[4][6];
         
         int pix = filtered[0][0].getHeight();
         
@@ -248,7 +265,7 @@ public class GaborFilter {
             }
         }
         
-        double[] orientations = new double[6];
+        float[] orientations = new float[6];
         
         for(int z = 0; z < 4; ++z) {            //6 different orientations
             
@@ -259,17 +276,19 @@ public class GaborFilter {
             }
         }
         
-        double sgoed = 0;
+        float sgoed = 0;
         for(int i = 1; i < 7; ++i) {
             
             sgoed += (orientations[i-1] + orientations[i%6]);
         }
         
         System.out.println("SGOED Value: " + sgoed);*/
-        //BufferedImage filtered = new BufferedImage( result.length, result[0].length, BufferedImage.TYPE_INT_RGB);
-        BufferedImage filteredImage = applyFilter(greyImage, normalizeKernel(kernels[0][0]));
+
+        int filteredDim = applyFilter(greyImage, normalizeKernel(kernels[0][0]));
+        
+        BufferedImage result = constructResult(filteredDim);
         
         //write the resulting filtered image to a file
-        ImageIO.write(filteredImage, "jpg", new File("filteredImage.png"));
+        ImageIO.write(result, "jpg", new File("filteredImage.png"));
     }
 }

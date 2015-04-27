@@ -12,13 +12,13 @@ package gaborfilter;
  */
 public class Kernel {
     
-    static double[][] kernel;
-    static int kval;
+    float[][] kernel;
+    int kval;
     
     public Kernel(int k) {
         
         kval = k;
-        kernel = new double[kval][kval];
+        kernel = new float[kval][kval];
         return;
     }
 }

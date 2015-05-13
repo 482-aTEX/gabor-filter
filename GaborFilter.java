@@ -92,7 +92,7 @@ public class GaborFilter {
         int i, j;
         for(i = 0; i < kval; ++i) {
             for(j = 0; j < kval; ++j) {
-                writer.print(kernel.kernel[i][j] + ", ");
+                writer.print(kernel.kernel[i][j] + "f, ");
             }
             
             writer.println();
@@ -161,7 +161,7 @@ public class GaborFilter {
                     max = grayVal;
             }
         }
-        System.out.println("Min: " + min + " Max: " + max);
+        //System.out.println("Min: " + min + " Max: " + max);
                 
         int newGray, rgb;
         for(int i = 0; i < filteredDim; ++i) {
@@ -169,14 +169,9 @@ public class GaborFilter {
                 
                 grayVal = (int)convolution[i][j];
                 
-                //newGray = (grayVal-min) * ((255-0)/(max-min)) + 0;
-                //rgb = newGray<<16 | newGray << 8 | newGray;
-                rgb = grayVal<<16 | grayVal << 8 | grayVal;
-                System.out.println("setting rgb: " + grayVal);
-                //if(i < kval && j < kval) {
-                    
-                    //result.setRGB(i,j, kernels[0][0].kernel[i][j]);
-                //}
+                newGray = (grayVal-min) * ((255-0)/(max-min)) + 0;
+                rgb = newGray<<16 | newGray << 8 | newGray;
+                //rgb = grayVal<<16 | grayVal << 8 | grayVal;
                 result.setRGB(i,j,rgb);
             }
         }
@@ -213,6 +208,7 @@ public class GaborFilter {
         //input parameters for Gabor kernel
         float lambda, theta, psi, sigma, gamma;
         
+        //set to 2 for 9x9 kernels, 3 for 13x13 kernels
         lambda = 2;               //pixel range: ( < 1/5 of image length or width to prevent edge effects)
                                    //controls "density" of the band
         
@@ -244,13 +240,13 @@ public class GaborFilter {
         kernels = new Kernel[4][6];
         //calculate Gabor kernels (stored locally)
        
-        writer = new PrintWriter(new FileWriter("9x9kernels.txt", true));
+        writer = new PrintWriter(new FileWriter("kernels.txt", true));
         writer.println();
         
         for(int z = 0; z < 4; ++z) {            //4 different scales  
             for(int y = 0; y < 6; ++y) {        //6 different orientations   
                 Kernel ker = new Kernel(kval);
-                kernels[z][y] = gaborKernel(lambda, (30*y), psi, sigma, (gamma*(float)Math.pow(2.0, z)), ker);
+                kernels[z][y] = gaborKernel(lambda, (30*y + 40), psi, sigma, (gamma*(float)Math.pow(2.0, z)), ker);
                 printKernel(normalizeKernel(kernels[z][y]));
                 //System.out.println("===================================================================");
             }
@@ -371,32 +367,18 @@ public class GaborFilter {
             }//writer.println();
         }
         
-        
-        /*for(int i = 0; i < pix; ++i) {
-            for(int j = 0; j < pix; ++j) {
-                
-                System.out.println("check " + sgoed[j+i*pix]);
-                int normalSgoed = ((int)sgoed[j+i*pix]-(int)min) * ((255-0)/((int)max-(int)min)) + 0;
-                int rgb = normalSgoed<<16 | normalSgoed << 8 | normalSgoed;
-                System.out.println("N " + normalSgoed);
-                result.setRGB(i,j,rgb);
-            }
-        }*/
-        System.out.println("min sgoed: " + min + " max sgoed: " + max);
-        
+        System.out.println("min sgoed: " + min + " max sgoed: " + max);     
         System.out.println("sum of SGOEDs: " + totalSgoed);
         
         ImageIO.write(greyImage, "png", new File("greyImage.png"));
         
-        ImageIO.write(result, "jpg", new File("filteredImage.jpg"));
-        //System.out.println("Orientation Energies: "); 
-        //System.out.println("SGOED Value: " + sgoed);
 
-        /*for(int i = 0; i < 6; ++i) {
+        //prints out 6 filtered images, one for each orientation
+        for(int i = 0; i < 6; ++i) {
             int filteredDim = applyFilter(greyImage, normalizeKernel(kernels[0][i]));
-            BufferedImage result = constructResult(filteredDim);
+            result = constructResult(filteredDim);
             //write the resulting filtered image to a file
-            
-        }*/
+            ImageIO.write(result, "jpg", new File("filteredImage" + i + ".jpg"));
+        }
     }
 }
